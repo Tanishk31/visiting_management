@@ -98,7 +98,17 @@ export const AuthProvider = ({ children }) => {
 
             // Attempt registration
             console.log('Registering with data:', userData);
-            const response = await auth.register(userData);
+            const response = await auth.register(userData, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (!response.data) {
+                throw new Error('No response from server');
+            }
+            
             const { token, user } = response.data;
 
             if (!token || !user) {

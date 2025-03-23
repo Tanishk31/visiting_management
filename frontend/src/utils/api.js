@@ -7,13 +7,34 @@ const api = axios.create({
     baseURL: API_BASE_URL,
     headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Access-Control-Allow-Origin': 'http://localhost:3000'
+        'Accept': 'application/json'
     },
     withCredentials: true,
     validateStatus: status => {
         return (status >= 200 && status < 300) || status === 304;
     }
+});
+
+// Add request interceptor for CORS preflight
+api.interceptors.request.use(config => {
+    // Handle preflight
+    if (config.method === 'options') {
+        config.headers = {
+            ...config.headers,
+            'Access-Control-Request-Method': 'POST, GET, PUT, DELETE',
+            'Access-Control-Request-Headers': 'Content-Type, Authorization, Accept'
+        };
+    }
+
+    // Add origin header to all requests
+    config.headers = {
+        ...config.headers,
+        'Origin': 'http://localhost:3000'
+    };
+
+    return config;
+}, error => {
+    return Promise.reject(error);
 });
 
 // Handle OPTIONS requests
@@ -25,16 +46,39 @@ api.interceptors.request.use(config => {
     return config;
 });
 
-// Debug interceptor
+// Debug interceptors
 api.interceptors.request.use(request => {
-    console.log('Starting API Request:', {
-        url: request.url,
-        method: request.method,
-        headers: request.headers,
-        data: request.data
-    });
+    const timestamp = new Date().toISOString();
+    console.group(`🌐 API Request [${timestamp}]`);
+    console.log('URL:', request.url);
+    console.log('Method:', request.method);
+    console.log('Headers:', request.headers);
+    console.log('Data:', request.data);
+    console.groupEnd();
     return request;
 });
+
+api.interceptors.response.use(
+    response => {
+        const timestamp = new Date().toISOString();
+        console.group(`✅ API Response [${timestamp}]`);
+        console.log('URL:', response.config.url);
+        console.log('Status:', response.status);
+        console.log('Data:', response.data);
+        console.groupEnd();
+        return response;
+    },
+    error => {
+        const timestamp = new Date().toISOString();
+        console.group(`❌ API Error [${timestamp}]`);
+        console.log('URL:', error.config?.url);
+        console.log('Status:', error.response?.status);
+        console.log('Data:', error.response?.data);
+        console.log('Error:', error.message);
+        console.groupEnd();
+        return Promise.reject(error);
+    }
+);
 
 api.interceptors.response.use(
     response => {
@@ -98,8 +142,18 @@ export const auth = {
     login: (credentials) => 
         api.post('/auth/login', credentials),
     
-    register: (userData) => 
-        api.post('/auth/register', userData),
+    register: (userData) =>
+        api.post('/auth/register', userData, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            timeout: 15000,
+            validateStatus: function (status) {
+                return (status >= 200 && status < 300) || status === 304;
+            },
+            maxRedirects: 0
+        }),
     
     getCurrentUser: () => 
         api.get('/auth/me'),
@@ -143,13 +197,31 @@ export const visitors = {
         api.get('/visitors/my-visits'),
 
     // Request pre-approval as a visitor
-    preApprove: (data) => {
-        const formattedData = {
-            ...data,
-            startTime: new Date(data.startTime).toISOString(),
-            endTime: new Date(data.endTime).toISOString()
-        };
-        return api.post('/visitors/pre-approve', formattedData);
+    preApprove: async (data) => {
+        try {
+            const formattedData = {
+                ...data,
+                startTime: new Date(data.startTime).toISOString(),
+                endTime: new Date(data.endTime).toISOString()
+            };
+
+            const response = await api.post('/visitors/preapprove', formattedData, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                timeout: 10000,
+                validateStatus: function (status) {
+                    return (status >= 200 && status < 300);
+                }
+            });
+
+            console.log('Pre-approval API response:', response);
+            return response;
+        } catch (error) {
+            console.error('Pre-approval request error:', error.response || error);
+            throw error;
+        }
     },
 
     // Create a pre-approved visit (by host)
