@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { auth, handleApiError } from "../utils/api";
+import { handleApiError } from "../utils/api";
 import "../styles/auth.css";
 
 const Register = () => {
@@ -15,7 +15,7 @@ const Register = () => {
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
-    const { login } = useAuth();
+    const { register: authRegister } = useAuth();
     const navigate = useNavigate();
 
     const handleChange = (e) => {
@@ -79,33 +79,14 @@ const Register = () => {
         setLoading(true);
 
         try {
-            // Step 1: Register the user
-            console.log("Attempting registration with:", {
-                ...formData,
-                password: '[REDACTED]'
-            });
+            // Register and automatically log in
+            await authRegister(formData);
+            console.log("Registration and authentication successful");
             
-            const registrationResponse = await auth.register(formData);
-            console.log("Registration successful:", registrationResponse.data);
-
-            // Step 2: Clear any existing auth state
-            localStorage.removeItem('token');
-            
-            // Step 3: Attempt login with same credentials
-            try {
-                console.log("Attempting automatic login after registration");
-                await login(formData.email, formData.password);
-                console.log("Automatic login successful");
-                
-                // Step 4: Navigate based on role (this will only happen if login succeeds)
-                const destination = formData.role === 'host' ? '/host-dashboard' : '/';
-                console.log(`Navigating to ${destination}`);
-                navigate(destination);
-            } catch (loginError) {
-                console.error("Auto-login failed:", loginError);
-                setError("Registration successful, but automatic login failed. Please try logging in manually.");
-                navigate('/login');
-            }
+            // Navigate based on role
+            const destination = formData.role === 'host' ? '/host-dashboard' : '/';
+            console.log(`Navigating to ${destination}`);
+            navigate(destination);
         } catch (err) {
             console.error("Registration error:", err);
             setError(handleApiError(err) || "Registration failed. Please try again.");

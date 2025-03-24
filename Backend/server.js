@@ -11,23 +11,12 @@ const app = express();
 
 // CORS Configuration
 const corsOptions = {
-    origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
-        
-        // Check if origin is allowed
-        const allowedOrigins = ['http://localhost:3000'];
-        if (allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    credentials: true,
+    origin: 'http://localhost:3000',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
-    preflightContinue: false,
-    optionsSuccessStatus: 204
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'Accept'],
+    exposedHeaders: ['Authorization', 'Set-Cookie'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true
 };
 
 app.use(cors(corsOptions));
@@ -61,8 +50,15 @@ app.use('/api/auth', (req, res, next) => {
     next();
 }, authRoutes);
 
+// Ensure auth token is present for visitor routes
 app.use('/api/visitors', (req, res, next) => {
     console.log('Visitor route accessed:', req.method, req.path);
+    const authHeader = req.headers.authorization;
+    
+    // Debug logging
+    console.log('Auth header:', authHeader);
+    console.log('Request headers:', req.headers);
+    
     next();
 }, visitorRoutes);
 
@@ -99,8 +95,16 @@ app.get('/debug/routes', (req, res) => {
 app.get('/test', (req, res) => {
     res.json({ message: 'Server is working' });
 });
+// Ensure uploads directory exists
+const fs = require('fs');
+const path = require('path');
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir);
+}
 
 // Serve static files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/uploads', express.static('uploads'));
 
 // Error handling middleware

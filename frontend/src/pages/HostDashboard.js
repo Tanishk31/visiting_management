@@ -25,40 +25,111 @@ const HostDashboard = () => {
     const [showPass, setShowPass] = useState(false);
     
     useEffect(() => {
-        // Wait for auth to be initialized
-        if (authLoading) {
-            return;
-        }
+        const initialize = async () => {
+            try {
+                // Wait for auth to be initialized
+                if (authLoading) {
+                    return;
+                }
 
+                // Check if authenticated
+                if (!user) {
+                    console.log('No user found, redirecting to login');
+                    navigate('/login');
+                    return;
+                }
+
+                // Verify user role from token
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    console.log('No token found, redirecting to login');
+                    navigate('/login');
+                    return;
+                }
+
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    if (!payload.role || payload.role !== 'host') {
+                        console.log('Invalid role in token:', payload.role);
+                        navigate('/login');
+                        return;
+                    }
+                } catch (err) {
+                    console.error('Error parsing token:', err);
+                    navigate('/login');
+                    return;
+                }
+
+                // Role is verified, fetch dashboard data
+                await fetchDashboardData();
+            } catch (err) {
+                console.error('Dashboard initialization error:', err);
+                setError('Failed to initialize dashboard. Please try logging in again.');
+                navigate('/login');
+            }
+        };
+
+        initialize();
+    }, [user, authLoading, navigate]);
+
+    const fetchDashboardData = async () => {
+        // Don't fetch if not authenticated
         if (!user || user.role !== 'host') {
+            console.log('Not authorized to fetch data');
             navigate('/login');
             return;
         }
-        
-        fetchDashboardData();
-    }, [user, authLoading, navigate]);
 
-    if (authLoading) {
-        return <div className="loading">Loading authentication...</div>;
-    }
-
-    const fetchDashboardData = async () => {
         try {
             setLoading(true);
             setError("");
 
-            // Fetch active visits
+            console.log('Fetching active visits...');
             const activeResponse = await visitors.getActiveVisits();
+            
+            if (!activeResponse?.data) {
+                throw new Error('Invalid response for active visits');
+            }
+            
             setActiveVisits(activeResponse.data);
+            console.log('Active visits fetched:', activeResponse.data.length);
 
-            // Fetch all visits for stats
+            console.log('Fetching all visits...');
             const allVisits = await visitors.getHostRequests();
+            
+            if (!allVisits?.data) {
+                throw new Error('Invalid response for host requests');
+            }
+            
             const visits = allVisits.data;
+            console.log('All visits fetched:', visits.length);
 
-            // Calculate stats
+            // Calculate stats with validation
+            // Group visits by status and calculate stats
             const statistics = visits.reduce((acc, visit) => {
+                if (!visit || !visit.status) {
+                    console.warn('Invalid visit data:', visit);
+                    return acc;
+                }
                 acc.total++;
-                acc[visit.status]++;
+                
+                // Map the status to our stat categories
+                switch (visit.status) {
+                    case 'pending':
+                        acc.pending++;
+                        break;
+                    case 'approved':
+                        acc.approved++;
+                        break;
+                    case 'denied':
+                        acc.denied++;
+                        break;
+                    case 'completed':
+                        acc.checkedOut++;
+                        break;
+                    default:
+                        console.warn('Unknown status:', visit.status);
+                }
                 return acc;
             }, {
                 total: 0,
@@ -68,13 +139,37 @@ const HostDashboard = () => {
                 checkedOut: 0
             });
 
-            setStats(statistics);
+            // Set pending requests to be shown in active visits
+            const pendingRequests = visits.filter(visit => visit.status === 'pending');
+            setActiveVisits(prevVisits => {
+                const uniqueVisits = [...pendingRequests, ...prevVisits];
+                return [...new Set(uniqueVisits.map(v => v._id))].map(id =>
+                    uniqueVisits.find(v => v._id === id)
+                );
+            });
 
-            // Get recent visits (last 5)
-            setRecentVisits(visits.slice(0, 5));
+            setStats(statistics);
+            console.log('Stats calculated:', statistics);
+
+            // Get recent visits (last 5) with validation
+            const recentVisitsData = visits
+                .filter(visit => visit && visit.checkIn) // Only include valid visits
+                .sort((a, b) => new Date(b.checkIn) - new Date(a.checkIn))
+                .slice(0, 5);
+            
+            setRecentVisits(recentVisitsData);
+            console.log('Recent visits set:', recentVisitsData.length);
 
         } catch (err) {
-            setError(handleApiError(err));
+            console.error('Dashboard data fetch error:', err);
+            const errorMessage = handleApiError(err);
+            setError(errorMessage);
+            
+            // Handle authentication errors
+            if (err.response?.status === 401) {
+                console.log('Auth error in dashboard, redirecting to login');
+                navigate('/login');
+            }
         } finally {
             setLoading(false);
         }

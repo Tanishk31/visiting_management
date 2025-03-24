@@ -19,24 +19,52 @@ export const AuthProvider = ({ children }) => {
     // Check if user is already logged in
     useEffect(() => {
         const initializeAuth = async () => {
-            const token = localStorage.getItem('token');
-            if (token) {
+            try {
+                const token = localStorage.getItem('token');
+                console.log('Initializing auth with token:', token ? 'exists' : 'none');
+                
+                if (!token) {
+                    console.log('No token found, clearing auth state');
+                    setUser(null);
+                    setLoading(false);
+                    return;
+                }
+
+                // Verify token is valid by checking expiration
                 try {
-                    const response = await auth.getCurrentUser();
-                    if (response.data) {
-                        setUser(response.data);
-                    } else {
-                        throw new Error('No user data received');
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    if (payload.exp < Date.now() / 1000) {
+                        console.log('Token expired, clearing auth state');
+                        localStorage.removeItem('token');
+                        setUser(null);
+                        setLoading(false);
+                        return;
                     }
                 } catch (err) {
-                    console.error('Auth initialization error:', err);
+                    console.error('Invalid token format:', err);
+                    localStorage.removeItem('token');
+                    setUser(null);
+                    setLoading(false);
+                    return;
+                }
+
+                // Token looks valid, verify with server
+                const response = await auth.getCurrentUser();
+                if (response.data) {
+                    console.log('User verified:', response.data);
+                    setUser(response.data);
+                } else {
+                    console.log('No user data in response');
                     localStorage.removeItem('token');
                     setUser(null);
                 }
-            } else {
+            } catch (err) {
+                console.error('Auth initialization error:', err);
+                localStorage.removeItem('token');
                 setUser(null);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
 
         initializeAuth();
@@ -50,34 +78,23 @@ export const AuthProvider = ({ children }) => {
 
             // Attempt login
             const response = await auth.login({ email, password });
-            const { token, user } = response.data;
+            console.log('Login response:', response);
 
+            const { token, user } = response.data;
+            
             if (!token || !user) {
                 throw new Error('Invalid response from server');
             }
 
-            // Save token and user
+            // Save token
             localStorage.setItem('token', token);
-            
-            // Verify token was saved
-            const savedToken = localStorage.getItem('token');
-            if (!savedToken) {
-                throw new Error('Failed to save authentication token');
-            }
+            console.log('Token saved to localStorage');
 
-            // Verify token works by making a test request
-            try {
-                const verifyResponse = await auth.getCurrentUser();
-                if (!verifyResponse.data) {
-                    throw new Error('Failed to verify authentication');
-                }
-                // Set user only after verification
-                setUser(verifyResponse.data);
-                return verifyResponse.data;
-            } catch (verifyErr) {
-                localStorage.removeItem('token');
-                throw new Error('Failed to verify authentication');
-            }
+            // Set user in state
+            setUser(user);
+            console.log('User state set:', user);
+
+            return user;
 
         } catch (err) {
             console.error('Login error:', err);
@@ -98,47 +115,23 @@ export const AuthProvider = ({ children }) => {
 
             // Attempt registration
             console.log('Registering with data:', userData);
-            const response = await auth.register(userData, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
-            
-            if (!response.data) {
-                throw new Error('No response from server');
-            }
-            
-            const { token, user } = response.data;
+            const response = await auth.register(userData);
+            console.log('Registration response:', response);
 
+            const { token, user } = response.data;
+            
             if (!token || !user) {
                 throw new Error('Invalid response from server');
             }
 
             // Save token
             localStorage.setItem('token', token);
-            
-            // Verify token was saved
-            const savedToken = localStorage.getItem('token');
-            if (!savedToken) {
-                throw new Error('Failed to save authentication token');
-            }
+            console.log('Token saved to localStorage');
 
-            // Verify token works by making a test request
-            try {
-                const verifyResponse = await auth.getCurrentUser();
-                if (!verifyResponse.data) {
-                    throw new Error('Failed to verify authentication');
-                }
-                // Set user only after verification
-                setUser(verifyResponse.data);
-                console.log('Registration and verification successful:', verifyResponse.data);
-                return verifyResponse.data;
-            } catch (verifyErr) {
-                console.error('Verification error:', verifyErr);
-                localStorage.removeItem('token');
-                throw new Error('Failed to verify authentication after registration');
-            }
+            // Set user in state
+            setUser(user);
+            console.log('Registration successful:', user);
+            return user;
 
         } catch (err) {
             console.error('Registration error:', err);
@@ -174,9 +167,38 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // Check if user has specific role
+    // Check if user has specific role from both state and token
     const hasRole = (role) => {
-        return user?.role === role;
+        if (!user?.role) {
+            // If no user in state, check token
+            const token = localStorage.getItem('token');
+            if (!token) return false;
+            
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                return payload.role === role;
+            } catch (err) {
+                console.error('Error checking role from token:', err);
+                return false;
+            }
+        }
+        return user.role === role;
+    };
+
+    // Verify authentication status
+    const isAuthenticated = () => {
+        if (!user) return false;
+        
+        const token = localStorage.getItem('token');
+        if (!token) return false;
+
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            return payload.exp > Date.now() / 1000;
+        } catch (err) {
+            console.error('Error verifying token:', err);
+            return false;
+        }
     };
 
     const value = {
@@ -188,7 +210,7 @@ export const AuthProvider = ({ children }) => {
         logout,
         updateProfile,
         hasRole,
-        isAuthenticated: !!user,
+        isAuthenticated: isAuthenticated()
     };
 
     return (

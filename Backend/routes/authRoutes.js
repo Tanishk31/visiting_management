@@ -59,12 +59,19 @@ router.post('/register', async (req, res) => {
             throw saveError;
         }
 
-        // Generate JWT token
+        // Generate JWT token with user role and other necessary info
         const token = jwt.sign(
-            { userId: user._id },
+            {
+                userId: user._id,
+                role: user.role,
+                name: user.name
+            },
             process.env.JWT_SECRET,
             { expiresIn: '24h' }
         );
+
+        // Set token in authorization header
+        res.header('Authorization', `Bearer ${token}`);
 
         // Return user data without sensitive information
         const userData = user.getPublicProfile();
@@ -128,12 +135,18 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ message: 'Invalid email or password' });
         }
 
-        // Generate token
+        // Generate token with user role
         const token = jwt.sign(
-            { userId: user._id },
+            {
+                userId: user._id,
+                role: user.role
+            },
             process.env.JWT_SECRET,
             { expiresIn: '24h' }
         );
+
+        // Set token in authorization header
+        res.header('Authorization', `Bearer ${token}`);
 
         const userData = user.getPublicProfile();
         console.log('Login successful:', userData);

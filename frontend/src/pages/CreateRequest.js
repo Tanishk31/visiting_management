@@ -115,21 +115,29 @@ const CreateRequest = () => {
         setLoading(true);
 
         try {
+            // Create FormData with all required fields
             const form = new FormData();
             
-            // Append all form data
-            Object.keys(formData).forEach((key) => {
-                if (formData[key]) {
-                    form.append(key, formData[key]);
-                }
-            });
-            
-            // Convert base64 image to blob and append
+            // Basic visitor information
+            form.append("name", formData.name);
+            form.append("email", formData.email);
+            form.append("contact", formData.contact);
+            form.append("company", formData.company);
+            form.append("purpose", formData.purpose);
+            form.append("hostId", selectedHostId);
+
+            // Convert and append photo
             const photoBlob = dataURItoBlob(image);
             form.append("photo", photoBlob);
 
-            // Add selected host ID
-            form.append("hostId", selectedHostId);
+            console.log('Submitting form data:', {
+                name: formData.name,
+                email: formData.email,
+                contact: formData.contact,
+                company: formData.company,
+                purpose: formData.purpose,
+                hostId: selectedHostId
+            });
 
             const response = await visitors.createRequest(form);
             const host = hosts.find(h => h._id === selectedHostId);
