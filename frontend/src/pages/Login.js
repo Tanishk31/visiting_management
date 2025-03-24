@@ -43,10 +43,19 @@ const Login = () => {
             navigate(path, { replace: true });
         } catch (err) {
             console.error("Login error:", err);
-            setError(
-                err.response?.data?.message ||
-                "Failed to login. Please check your credentials."
-            );
+            if (err.response?.status === 401) {
+                setError("Invalid email or password");
+            } else {
+                setError(
+                    err.response?.data?.message ||
+                    "Failed to login. Please check your credentials."
+                );
+            }
+            // Clear password field on error
+            setFormData(prev => ({
+                ...prev,
+                password: ""
+            }));
         } finally {
             setLoading(false);
         }

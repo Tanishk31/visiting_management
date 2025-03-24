@@ -34,9 +34,46 @@ const HostPreApproval = () => {
         }
 
         try {
+            // Validate required fields
+            if (!formData.visitorName || !formData.visitorEmail || !formData.visitorContact) {
+                setError("Please fill in all required fields");
+                setLoading(false);
+                return;
+            }
+
             console.log('Creating pre-approval with data:', formData);
-            await visitors.createPreApproval(formData);
-            alert("Visitor pre-approved successfully! They will receive an email with the QR code.");
+            const response = await visitors.createPreApproval(formData);
+                setError("Please fill in all required fields");
+                setLoading(false);
+                return;
+            }
+
+            console.log('Creating pre-approval with data:', requestData);
+            try {
+                const response = await visitors.createPreApproval(requestData);
+                console.log('Pre-approval response:', response);
+
+                if (response && response.data) {
+                    // Show success message
+                    alert("Visitor pre-approved successfully! They will receive an email with the QR code.");
+                    
+                    // Clear form
+                    setFormData({
+                        visitorName: "",
+                        visitorEmail: "",
+                        visitorContact: "",
+                        purpose: "",
+                        company: "",
+                        startTime: "",
+                        endTime: ""
+                    });
+                } else {
+                    throw new Error('Invalid response from server');
+                }
+            } catch (error) {
+                console.error('Error in createPreApproval:', error);
+                throw error; // Re-throw to be caught by outer catch block
+            }
             // Clear form
             setFormData({
                 visitorName: "",
@@ -49,11 +86,13 @@ const HostPreApproval = () => {
             });
         } catch (err) {
             console.error('Pre-approval error:', err);
-            if (err.response?.data?.message) {
-                setError(err.response.data.message);
-            } else {
-                setError("Error creating pre-approval. Please try again.");
-            }
+            const errorMessage = err.response?.data?.errors
+                ? err.response.data.errors.join('\n')
+                : err.response?.data?.message
+                    ? err.response.data.message
+                    : "Error creating pre-approval. Please try again.";
+            setError(errorMessage);
+            console.error('Pre-approval validation errors:', errorMessage);
         } finally {
             setLoading(false);
         }

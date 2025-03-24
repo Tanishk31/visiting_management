@@ -94,7 +94,10 @@ api.interceptors.response.use(
         if (error.response?.status === 401) {
             console.error('Authentication error:', error);
             localStorage.removeItem('token');
-            window.location.href = '/login';
+            // Don't redirect if it's a login request
+            if (!error.config.url.includes('/auth/login')) {
+                window.location.href = '/login';
+            }
         }
 
         // Handle other errors
@@ -179,8 +182,9 @@ api.interceptors.response.use(
             // Remove invalid token
             localStorage.removeItem('token');
             
-            // Only redirect if not trying to verify current user
-            if (!originalRequest.url.includes('/auth/me')) {
+            // Only redirect if not a login attempt or user verification
+            if (!originalRequest.url.includes('/auth/login') &&
+                !originalRequest.url.includes('/auth/me')) {
                 window.location.href = '/login';
             }
         }
@@ -200,13 +204,14 @@ export const auth = {
         }),
     
     register: (userData) =>
-        api.post('/auth/register', userData, {
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            withCredentials: true
-        }),
+        api.post('/auth/register', userData)
+            .then(response => response)
+            .catch(error => {
+                if (error.response?.status === 400) {
+                    throw new Error("User already exists!");
+                }
+                throw error;
+            }),
     
     getCurrentUser: () =>
         api.get('/auth/me', {
@@ -265,30 +270,33 @@ export const visitors = {
         api.get('/visitors/my-visits')
     ),
 
-    // Request pre-approval as a visitor
-    preApprove: (data) => {
-        const formattedData = {
-            ...data,
+    // Create pre-approval for a visitor (used by hosts)
+    createPreApproval: async (data) => makeAuthRequest(async () => {
+        console.log('Making pre-approval request with data:', data);
+        return api.post('/visitors/preapprove', {
+            visitorName: data.visitorName,
+            visitorEmail: data.visitorEmail,
+            visitorContact: data.visitorContact,
+            company: data.company,
+            purpose: data.purpose,
             startTime: new Date(data.startTime).toISOString(),
             endTime: new Date(data.endTime).toISOString()
-        };
-        return makeAuthRequest(() =>
-            api.post('/visitors/preapprove', formattedData, {
-                headers: { 'Content-Type': 'application/json' }
-            })
-        );
-    },
+        });
+    }),
 
-    createPreApproval: (data) => {
-        const formattedData = {
+    // Request pre-approval as a visitor
+    preApprove: (data) => makeAuthRequest(() =>
+        api.post('/visitors/preapprove', {
             ...data,
             startTime: new Date(data.startTime).toISOString(),
             endTime: new Date(data.endTime).toISOString()
-        };
-        return makeAuthRequest(() =>
-            api.post('/visitors/create-pre-approval', formattedData)
-        );
-    },
+        }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        })
+    ),
 
     getPreApprovedVisits: () => makeAuthRequest(() =>
         api.get('/visitors/pre-approved-visits')
@@ -308,40 +316,37 @@ export const handleApiError = (error) => {
         stack: error.stack
     });
 
-    // Authentication errors
-    if (error.response?.status === 401 || error.message?.includes('token')) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
-        return 'Your session has expired. Please log in again.';
-    }
-
-    // Server validation errors
-    if (error.response?.data?.message) {
+    // Return backend validation error messages
+    if (error.response?.status === 400 && error.response?.data?.message) {
         return error.response.data.message;
     }
 
-    // Network errors
+    // Authentication errors
+    if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        if (!window.location.pathname.includes('/login')) {
+            window.location.href = '/login';
+        }
+        return 'Invalid credentials. Please try again.';
+    }
+
+    // Handle registration errors specifically
+    if (error.response?.status === 400) {
+        if (error.response.data?.message?.includes('already exists')) {
+            return 'User already exists with this email';
+        }
+        if (error.response.data?.message) {
+            return error.response.data.message;
+        }
+    }
+
+    // Handle network errors
     if (!error.response || error.message === 'Network Error') {
         return 'Network error. Please check your internet connection and try again.';
     }
 
-    // HTTP status code based errors
-    switch (error.response?.status) {
-        case 400:
-            return 'Invalid request. Please check your input and try again.';
-        case 403:
-            return 'You do not have permission to perform this action.';
-        case 404:
-            return 'The requested resource could not be found.';
-        case 422:
-            return 'Invalid data provided. Please check your input.';
-        case 429:
-            return 'Too many requests. Please try again later.';
-        case 500:
-            return 'Server error. Please try again later or contact support.';
-        default:
-            return 'An unexpected error occurred. Please try again.';
-    }
+    // Default to server error message if available
+    return error.response?.data?.message || 'An error occurred. Please try again.';
 };
 
 // File upload helper

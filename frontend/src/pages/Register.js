@@ -89,7 +89,7 @@ const Register = () => {
             navigate(destination);
         } catch (err) {
             console.error("Registration error:", err);
-            setError(handleApiError(err) || "Registration failed. Please try again.");
+            setError('User already exists!');
         } finally {
             setLoading(false);
         }

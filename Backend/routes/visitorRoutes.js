@@ -245,13 +245,46 @@ router.get('/my-visits', authMiddleware, async (req, res) => {
 });
 
 // Preapprove visit
-router.post('/preapprove', authMiddleware, async (req, res) => {
+// Validation middleware for pre-approval
+const validatePreApproval = (req, res, next) => {
+    const { visitorName, visitorEmail, visitorContact, purpose, company, startTime, endTime } = req.body;
+    const errors = [];
+
+    if (!visitorName) errors.push('Visitor name is required');
+    if (!visitorEmail) errors.push('Visitor email is required');
+    if (!visitorContact) errors.push('Visitor contact is required');
+    if (!purpose) errors.push('Purpose is required');
+    if (!company) errors.push('Company is required');
+    if (!startTime) errors.push('Start time is required');
+    if (!endTime) errors.push('End time is required');
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            message: 'Validation error',
+            errors
+        });
+    }
+
+    next();
+};
+
+router.post('/preapprove', authMiddleware, validatePreApproval, async (req, res) => {
     try {
-        const newVisit = new Visitor({
-            ...req.body,
+        console.log('Pre-approval request body:', req.body);
+        // Map the fields from frontend to match our model
+        const visitorData = {
+            name: req.body.visitorName,
+            email: req.body.visitorEmail,
+            contactNumber: req.body.visitorContact,
+            company: req.body.company,
+            purpose: req.body.purpose,
+            startTime: req.body.startTime,
+            endTime: req.body.endTime,
             host: req.user._id,
             status: 'pre_approved'
-        });
+        };
+
+        const newVisit = new Visitor(visitorData);
         await newVisit.save();
         
         await newVisit.populate([

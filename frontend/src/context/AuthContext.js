@@ -137,8 +137,14 @@ export const AuthProvider = ({ children }) => {
             console.error('Registration error:', err);
             localStorage.removeItem('token');
             setUser(null);
-            setError(err.response?.data?.message || err.message || 'Registration failed');
-            throw err;
+            
+            if (err.response?.status === 400 && err.response.data?.message) {
+                setError(err.response.data.message);
+            } else {
+                setError('Registration failed. Please try again.');
+            }
+            // Throw the original error with server message
+            throw new Error(err.response?.data?.message || err.message);
         } finally {
             setLoading(false);
         }
