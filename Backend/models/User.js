@@ -102,12 +102,26 @@ userSchema.statics.findActiveHosts = function() {
 
 // Static method to find by email with role
 userSchema.statics.findByEmailAndRole = function(email, role) {
-    return this.findOne({ 
+    return this.findOne({
         email,
         role,
         status: 'active'
     });
 };
+
+// Create email index with proper error handling
+userSchema.index({ email: 1 }, {
+    unique: true,
+    background: true,
+    name: 'unique_email_index'
+});
+
+// Handle index errors
+userSchema.on('index', function(error) {
+    if (error) {
+        console.error('User Schema Index Error:', error);
+    }
+});
 
 const User = mongoose.model('User', userSchema);
 

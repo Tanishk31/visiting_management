@@ -6,12 +6,6 @@ const router = express.Router();
 
 // Register User
 router.post('/register', async (req, res) => {
-    // Set CORS headers specifically for registration
-    res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Methods', 'POST');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
-
     try {
         console.log('Registration request:', req.body);
         const { name, email, password, role, department, contactNumber } = req.body;
@@ -19,12 +13,6 @@ router.post('/register', async (req, res) => {
         // Check if role is valid
         if (!['host', 'visitor'].includes(role)) {
             return res.status(400).json({ message: 'Invalid role selected' });
-        }
-
-        // Check if user already exists
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-            return res.status(400).json({ message: 'User already exists with this email' });
         }
 
         // Validate department for hosts

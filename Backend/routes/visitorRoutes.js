@@ -8,7 +8,7 @@ const Visitor = require('../models/Visitor');
 // Configure multer for file upload
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'uploads/');
+        cb(null, path.join(__dirname, '../uploads/'));
     },
     filename: (req, file, cb) => {
         cb(null, Date.now() + path.extname(file.originalname));
@@ -146,7 +146,7 @@ router.post('/visit-request', authMiddleware, upload.single('photo'), validateVi
             startTime: new Date(),
             endTime: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
             status: 'pending',
-            photo: req.file.path
+            photo: 'uploads/' + path.basename(req.file.path)
         });
 
         await newVisit.save();
